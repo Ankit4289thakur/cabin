@@ -1,15 +1,18 @@
 import React from 'react';
 import { CabinItem, ItemType } from '../types';
-import { FileText, Image as ImageIcon, File, Star, Bell, Video, PlayCircle } from 'lucide-react';
+import { FileText, Image as ImageIcon, File, Star, Bell, Video, PlayCircle, Trash2, RotateCcw } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 
 interface ItemCardProps {
   item: CabinItem;
   onClick: () => void;
   onToggleFavorite: (e: React.MouseEvent) => void;
+  onDelete?: (e: React.MouseEvent) => void;
+  onRestore?: (e: React.MouseEvent) => void;
+  isTrash?: boolean;
 }
 
-const ItemCard: React.FC<ItemCardProps> = ({ item, onClick, onToggleFavorite }) => {
+const ItemCard: React.FC<ItemCardProps> = ({ item, onClick, onToggleFavorite, onDelete, onRestore, isTrash = false }) => {
   const getIcon = () => {
     switch (item.type) {
       case ItemType.NOTE: return <FileText size={24} className="text-wood-500" />;
@@ -38,10 +41,10 @@ const ItemCard: React.FC<ItemCardProps> = ({ item, onClick, onToggleFavorite }) 
   return (
     <div 
       onClick={onClick}
-      className="group relative bg-white dark:bg-stone-900 rounded-xl border border-stone-200 dark:border-stone-800 shadow-sm hover:shadow-md transition-all cursor-pointer overflow-hidden flex flex-col h-48 sm:h-56"
+      className={`group relative bg-white dark:bg-stone-900 rounded-xl border ${isTrash ? 'border-red-200 dark:border-red-900' : 'border-stone-200 dark:border-stone-800'} shadow-sm hover:shadow-md transition-all cursor-pointer overflow-hidden flex flex-col h-48 sm:h-56`}
     >
       {/* Preview Area */}
-      <div className="flex-1 bg-stone-50 dark:bg-stone-950 relative overflow-hidden flex items-center justify-center">
+      <div className={`flex-1 bg-stone-50 dark:bg-stone-950 relative overflow-hidden flex items-center justify-center ${isTrash ? 'grayscale opacity-70' : ''}`}>
         {isImage ? (
           <img 
             src={item.content} 
@@ -73,7 +76,7 @@ const ItemCard: React.FC<ItemCardProps> = ({ item, onClick, onToggleFavorite }) 
         )}
 
         {/* Reminder Badge */}
-        {hasReminder && (
+        {hasReminder && !isTrash && (
           <div className="absolute top-3 right-3 w-8 h-8 bg-wood-500 rounded-full shadow-sm flex items-center justify-center z-10 text-white" title="Reminder set">
             <Bell size={14} className="fill-current" />
           </div>
@@ -82,14 +85,38 @@ const ItemCard: React.FC<ItemCardProps> = ({ item, onClick, onToggleFavorite }) 
 
       {/* Content Info */}
       <div className="p-4 border-t border-stone-100 dark:border-stone-800 bg-white dark:bg-stone-900 z-10 relative">
-        <div className="flex justify-between items-start mb-1">
-          <h3 className="font-medium text-stone-800 dark:text-stone-100 truncate pr-6 text-sm">{item.title}</h3>
-          <button 
-            onClick={(e) => { e.stopPropagation(); onToggleFavorite(e); }}
-            className={`absolute right-3 top-4 hover:scale-110 transition-transform ${item.isFavorite ? 'text-yellow-400 fill-current' : 'text-stone-300 dark:text-stone-600 hover:text-yellow-400'}`}
-          >
-            <Star size={16} />
-          </button>
+        <div className="flex justify-between items-start mb-1 gap-2">
+          <h3 className="font-medium text-stone-800 dark:text-stone-100 truncate flex-1 text-sm">{item.title}</h3>
+          
+          <div className="flex gap-1 z-20">
+            {isTrash && onRestore ? (
+                <button 
+                    onClick={(e) => { e.stopPropagation(); onRestore(e); }}
+                    className="p-1.5 text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20 rounded transition-colors"
+                    title="Restore Item"
+                >
+                    <RotateCcw size={16} />
+                </button>
+            ) : (
+                <button 
+                    onClick={(e) => { e.stopPropagation(); onToggleFavorite(e); }}
+                    className={`p-1.5 hover:bg-stone-100 dark:hover:bg-stone-800 rounded ${item.isFavorite ? 'text-yellow-400 fill-current' : 'text-stone-300 dark:text-stone-600 hover:text-yellow-400'}`}
+                    title={item.isFavorite ? "Remove from Favorites" : "Add to Favorites"}
+                >
+                    <Star size={16} className={item.isFavorite ? 'fill-current' : ''} />
+                </button>
+            )}
+            
+            {onDelete && (
+                <button 
+                    onClick={(e) => { e.stopPropagation(); onDelete(e); }}
+                    className="p-1.5 text-stone-300 dark:text-stone-600 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
+                    title={isTrash ? "Delete Permanently" : "Move to Trash"}
+                >
+                    <Trash2 size={16} />
+                </button>
+            )}
+          </div>
         </div>
         <div className="flex items-center justify-between text-xs text-stone-500 dark:text-stone-500 mt-2">
            <div className="flex gap-1">

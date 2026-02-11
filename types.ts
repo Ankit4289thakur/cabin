@@ -25,12 +25,14 @@ export interface CabinItem {
   mimeType?: string; // For images/files
   reminderTime?: number; // Timestamp for study alert
   reminderMessage?: string; // Custom message for the alert
+  deletedAt?: number; // Timestamp if in trash
 }
 
 export interface Folder {
   id: string;
   name: string;
   color?: string;
+  deletedAt?: number; // Timestamp if in trash
 }
 
 export interface AuthState {

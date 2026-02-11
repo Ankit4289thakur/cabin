@@ -1,5 +1,7 @@
 {
   "name": "Cabin",
   "description": "A distraction-free personal data store and study organizer. Consolidate your scattered digital content—documents, images, and notes—into one serene space.",
-  "requestFramePermissions": []
+  "requestFramePermissions": [
+    "camera"
+  ]
 }

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useAuth } from '../AuthContext';
 import { useTheme } from '../ThemeContext';
 import { Folder, User } from '../types';
-import { Folder as FolderIcon, LayoutGrid, Star, LogOut, Moon, Sun, HelpCircle, Plus, Check, X } from 'lucide-react';
+import { Folder as FolderIcon, LayoutGrid, Star, LogOut, Moon, Sun, Info, Plus, Check, X, Trash2, Loader2, RefreshCw } from 'lucide-react';
 
 interface SidebarProps {
   folders: Folder[];
@@ -10,7 +10,8 @@ interface SidebarProps {
   onSelectFolder: (id: string) => void;
   user: User | null;
   onOpenHelp: () => void;
-  onCreateFolder: (name: string) => void;
+  onCreateFolder: (name: string) => Promise<void>;
+  onDeleteFolder: (id: string) => void;
 }
 
 interface NavItemProps {
@@ -19,33 +20,52 @@ interface NavItemProps {
   label: string;
   selectedFolder: string;
   onSelectFolder: (id: string) => void;
+  onDelete?: () => void;
 }
 
-const NavItem: React.FC<NavItemProps> = ({ id, icon: Icon, label, selectedFolder, onSelectFolder }) => (
-  <button
-    onClick={() => onSelectFolder(id)}
-    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+const NavItem: React.FC<NavItemProps> = ({ id, icon: Icon, label, selectedFolder, onSelectFolder, onDelete }) => (
+  <div className={`group flex items-center justify-between w-full rounded-lg transition-colors ${
       selectedFolder === id 
-        ? 'bg-wood-500/10 text-wood-600 dark:text-wood-500 dark:bg-wood-500/20' 
-        : 'text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800'
-    }`}
-  >
-    <Icon size={18} className={selectedFolder === id ? 'text-wood-600 dark:text-wood-500' : 'text-stone-400 dark:text-stone-500'} />
-    {label}
-  </button>
+        ? 'bg-wood-500/10 dark:bg-wood-500/20' 
+        : 'hover:bg-stone-100 dark:hover:bg-stone-800'
+  }`}>
+      <button
+        onClick={() => onSelectFolder(id)}
+        className="flex-1 flex items-center gap-3 px-3 py-2 text-sm font-medium text-left outline-none focus:ring-2 focus:ring-inset focus:ring-wood-500/20 rounded-lg"
+      >
+        <Icon size={18} className={selectedFolder === id ? 'text-wood-600 dark:text-wood-500' : 'text-stone-400 dark:text-stone-500'} />
+        <span className={`truncate ${selectedFolder === id ? 'text-wood-600 dark:text-wood-500' : 'text-stone-600 dark:text-stone-400'}`}>{label}</span>
+      </button>
+      {onDelete && (
+         <button 
+            onClick={(e) => { 
+                e.stopPropagation(); 
+                e.preventDefault();
+                onDelete(); 
+            }}
+            className="mx-2 p-1.5 text-stone-400 dark:text-stone-500 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-all z-10"
+            title="Delete Folder"
+         >
+             <Trash2 size={16} />
+         </button>
+      )}
+  </div>
 );
 
-const Sidebar: React.FC<SidebarProps> = ({ folders, selectedFolder, onSelectFolder, user, onOpenHelp, onCreateFolder }) => {
+const Sidebar: React.FC<SidebarProps> = ({ folders, selectedFolder, onSelectFolder, user, onOpenHelp, onCreateFolder, onDeleteFolder }) => {
   const { logout } = useAuth();
   const { isDark, toggleTheme } = useTheme();
   const [isCreating, setIsCreating] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleCreateSubmit = (e: React.FormEvent) => {
+  const handleCreateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (newFolderName.trim()) {
-      onCreateFolder(newFolderName.trim());
+    if (newFolderName.trim() && !isSubmitting) {
+      setIsSubmitting(true);
+      await onCreateFolder(newFolderName.trim());
       setNewFolderName('');
+      setIsSubmitting(false);
       setIsCreating(false);
     }
   };
@@ -76,6 +96,13 @@ const Sidebar: React.FC<SidebarProps> = ({ folders, selectedFolder, onSelectFold
           selectedFolder={selectedFolder} 
           onSelectFolder={onSelectFolder} 
         />
+        <NavItem 
+          id="trash" 
+          icon={Trash2} 
+          label="Recently Deleted" 
+          selectedFolder={selectedFolder} 
+          onSelectFolder={onSelectFolder} 
+        />
       </div>
 
       {/* Folders */}
@@ -101,10 +128,13 @@ const Sidebar: React.FC<SidebarProps> = ({ folders, selectedFolder, onSelectFold
                     value={newFolderName}
                     onChange={(e) => setNewFolderName(e.target.value)}
                     placeholder="Name..."
+                    disabled={isSubmitting}
                     className="w-full text-sm px-2 py-1 border border-stone-300 dark:border-stone-700 rounded bg-stone-50 dark:bg-stone-800 text-stone-800 dark:text-stone-100 outline-none focus:border-wood-500"
                  />
-                 <button type="submit" className="p-1 text-green-600 hover:bg-green-50 rounded"><Check size={14}/></button>
-                 <button type="button" onClick={() => setIsCreating(false)} className="p-1 text-red-500 hover:bg-red-50 rounded"><X size={14}/></button>
+                 <button type="submit" disabled={isSubmitting} className="p-1 text-green-600 hover:bg-green-50 rounded">
+                    {isSubmitting ? <Loader2 size={14} className="animate-spin"/> : <Check size={14}/>}
+                 </button>
+                 <button type="button" disabled={isSubmitting} onClick={() => setIsCreating(false)} className="p-1 text-red-500 hover:bg-red-50 rounded"><X size={14}/></button>
               </div>
             </form>
           )}
@@ -117,6 +147,7 @@ const Sidebar: React.FC<SidebarProps> = ({ folders, selectedFolder, onSelectFold
               label={folder.name} 
               selectedFolder={selectedFolder} 
               onSelectFolder={onSelectFolder}
+              onDelete={() => onDeleteFolder(folder.id)}
             />
           ))}
         </div>
@@ -128,8 +159,8 @@ const Sidebar: React.FC<SidebarProps> = ({ folders, selectedFolder, onSelectFold
              onClick={onOpenHelp}
              className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors"
           >
-             <HelpCircle size={18} className="text-stone-400 dark:text-stone-500" />
-             Help & Support
+             <Info size={18} className="text-stone-400 dark:text-stone-500" />
+             About Cabin
           </button>
           <button 
              onClick={toggleTheme}

@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { CabinItem, ItemType } from '../types';
-import { X, Share2, Bell, Sparkles, PenTool, RefreshCw, BrainCircuit, Maximize2, Minimize2, Edit2, Check, Plus } from 'lucide-react';
+import { X, Share2, Bell, Sparkles, PenTool, RefreshCw, BrainCircuit, Maximize2, Minimize2, Edit2, Check, Plus, Trash2 } from 'lucide-react';
 import { generateContentFromPrompt, explainImage, MODELS } from '../services/geminiService';
 import ShareModal from './ShareModal';
 import ReminderModal from './ReminderModal';
@@ -9,9 +9,10 @@ interface ItemViewerProps {
   item: CabinItem;
   onClose: () => void;
   onUpdateItem?: (item: CabinItem) => void;
+  onDelete?: (id: string) => void;
 }
 
-const ItemViewer: React.FC<ItemViewerProps> = ({ item, onClose, onUpdateItem }) => {
+const ItemViewer: React.FC<ItemViewerProps> = ({ item, onClose, onUpdateItem, onDelete }) => {
   const [aiResult, setAiResult] = useState<string | null>(null);
   const [aiMode, setAiMode] = useState<'SUMMARY' | 'EXPLAIN' | 'REWRITE' | 'ANALYZE' | null>(null);
   const [isAiLoading, setIsAiLoading] = useState(false);
@@ -28,7 +29,46 @@ const ItemViewer: React.FC<ItemViewerProps> = ({ item, onClose, onUpdateItem }) 
 
   // Tag Editing State
   const [isEditingTags, setIsEditingTags] = useState(false);
-  const [tagInput, setTagInput] = useState(item.tags.join(', '));
+  const [localTags, setLocalTags] = useState<string[]>(item.tags);
+
+  useEffect(() => {
+    setLocalTags(item.tags);
+  }, [item.tags]);
+
+  const handleUpdateTag = (index: number, value: string) => {
+    const newTags = [...localTags];
+    newTags[index] = value;
+    setLocalTags(newTags);
+  };
+
+  const handleRemoveTag = (index: number) => {
+    setLocalTags(localTags.filter((_, i) => i !== index));
+  };
+
+  const handleAddTag = () => {
+    setLocalTags([...localTags, '']);
+  };
+
+  const handleSaveTags = () => {
+    if (onUpdateItem) {
+        const newTags = localTags
+            .map(t => t.trim())
+            .filter(t => t.length > 0);
+        // Deduplicate
+        const uniqueTags = Array.from(new Set(newTags));
+        onUpdateItem({
+            ...item,
+            tags: uniqueTags
+        });
+        setLocalTags(uniqueTags);
+    }
+    setIsEditingTags(false);
+  };
+
+  const handleCancelTags = () => {
+      setLocalTags(item.tags);
+      setIsEditingTags(false);
+  };
 
   const getDefaultPrompt = (mode: string) => {
     switch (mode) {
@@ -89,17 +129,6 @@ const ItemViewer: React.FC<ItemViewerProps> = ({ item, onClose, onUpdateItem }) 
     }
   };
 
-  const handleSaveTags = () => {
-      if (onUpdateItem) {
-          const newTags = tagInput.split(',').map(t => t.trim()).filter(t => t.length > 0);
-          onUpdateItem({
-              ...item,
-              tags: newTags
-          });
-      }
-      setIsEditingTags(false);
-  };
-
   const getYoutubeEmbedUrl = (url: string) => {
     const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
     const match = url.match(regExp);
@@ -115,28 +144,77 @@ const ItemViewer: React.FC<ItemViewerProps> = ({ item, onClose, onUpdateItem }) 
       <div className={`bg-white dark:bg-stone-900 w-full ${isFullscreen ? 'h-full rounded-none' : 'max-w-4xl h-[90vh] rounded-2xl'} shadow-2xl flex flex-col overflow-hidden relative border border-stone-200 dark:border-stone-800 transition-all duration-300 animate-scale-in`}>
         
         {/* Toolbar */}
-        <div className="h-16 flex items-center justify-between px-6 border-b border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900">
+        <div className="h-16 flex items-center justify-between px-6 border-b border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 shrink-0">
           <div className="flex-1 min-w-0 pr-4">
             <h2 className="text-xl font-serif font-bold text-stone-800 dark:text-stone-100 truncate">{item.title}</h2>
             
             {/* Tag Section */}
-            <div className="flex items-center gap-2 mt-1">
+            <div className="flex flex-wrap items-center gap-2 mt-1">
                 {isEditingTags ? (
-                    <div className="flex items-center gap-1">
-                        <input 
-                            type="text" 
-                            value={tagInput}
-                            onChange={(e) => setTagInput(e.target.value)}
-                            className="text-xs px-2 py-1 border border-stone-300 rounded dark:bg-stone-800 dark:text-white"
-                            autoFocus
-                        />
-                        <button onClick={handleSaveTags} className="p-1 text-green-600"><Check size={14}/></button>
-                        <button onClick={() => setIsEditingTags(false)} className="p-1 text-red-500"><X size={14}/></button>
+                    <div className="flex flex-wrap items-center gap-2">
+                        {localTags.map((tag, index) => (
+                            <div key={index} className="flex items-center bg-white dark:bg-stone-800 border border-stone-300 dark:border-stone-700 rounded-full px-2 py-0.5 shadow-sm">
+                                <span className="text-stone-400 text-xs mr-1">#</span>
+                                <input 
+                                    type="text" 
+                                    value={tag}
+                                    onChange={(e) => handleUpdateTag(index, e.target.value)}
+                                    className="text-xs min-w-[30px] w-16 bg-transparent outline-none text-stone-800 dark:text-stone-200"
+                                    autoFocus={index === localTags.length - 1}
+                                    placeholder="tag"
+                                />
+                                <button 
+                                    onClick={() => handleRemoveTag(index)} 
+                                    className="ml-1 text-stone-400 hover:text-red-500 rounded-full p-0.5"
+                                >
+                                    <X size={10}/>
+                                </button>
+                            </div>
+                        ))}
+                        
+                        <button 
+                            onClick={handleAddTag} 
+                            className="flex items-center gap-1 text-xs text-wood-600 dark:text-wood-500 hover:bg-stone-100 dark:hover:bg-stone-800 px-2 py-1 rounded-full border border-dashed border-wood-300 dark:border-wood-700"
+                        >
+                            <Plus size={12}/> Add
+                        </button>
+
+                        <div className="flex items-center gap-1 ml-2 border-l border-stone-200 dark:border-stone-700 pl-2">
+                            <button onClick={handleSaveTags} className="p-1 text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20 rounded" title="Save Tags">
+                                <Check size={16}/>
+                            </button>
+                            <button onClick={handleCancelTags} className="p-1 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded" title="Cancel">
+                                <X size={16}/>
+                            </button>
+                        </div>
                     </div>
                 ) : (
-                    <div className="flex gap-2 text-xs text-stone-500 dark:text-stone-400">
-                        {item.tags.map(t => <span key={t}>#{t}</span>)}
-                        <button onClick={() => setIsEditingTags(true)} className="hover:text-wood-600"><Edit2 size={10} /></button>
+                    <div className="flex flex-wrap gap-2 items-center">
+                        {item.tags.length > 0 ? (
+                            item.tags.map(t => (
+                                <span 
+                                    key={t} 
+                                    onClick={() => setIsEditingTags(true)}
+                                    className="bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-400 px-2 py-0.5 rounded-full text-xs hover:bg-stone-200 dark:hover:bg-stone-700 cursor-pointer border border-transparent hover:border-wood-200 dark:hover:border-wood-800 transition-colors"
+                                >
+                                    #{t}
+                                </span>
+                            ))
+                        ) : (
+                             <button 
+                                onClick={() => setIsEditingTags(true)}
+                                className="text-xs text-stone-400 hover:text-wood-600 italic hover:underline decoration-dashed underline-offset-4"
+                            >
+                                + Add tags
+                            </button>
+                        )}
+                        <button 
+                            onClick={() => setIsEditingTags(true)} 
+                            className="p-1 text-stone-400 hover:text-wood-600 rounded-full hover:bg-stone-100 dark:hover:bg-stone-800"
+                            title="Edit Tags"
+                        >
+                            <Edit2 size={12} />
+                        </button>
                     </div>
                 )}
             </div>
@@ -209,6 +287,16 @@ const ItemViewer: React.FC<ItemViewerProps> = ({ item, onClose, onUpdateItem }) 
             >
                 {isFullscreen ? <Minimize2 size={20} /> : <Maximize2 size={20} />}
             </button>
+            
+            {onDelete && (
+                <button 
+                    onClick={() => onDelete(item.id)}
+                    className="p-2 text-stone-500 dark:text-stone-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20 dark:hover:text-red-400 rounded-lg transition-colors"
+                    title="Delete Item"
+                >
+                    <Trash2 size={20} />
+                </button>
+            )}
 
             <button onClick={onClose} className="p-2 text-stone-500 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 rounded-lg transition-colors">
               <X size={24} />

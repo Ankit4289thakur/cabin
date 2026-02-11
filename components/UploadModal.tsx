@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useAuth } from '../AuthContext';
 import { mockBackend } from '../services/mockBackend';
 import { Folder, ItemType } from '../types';
-import { X, Upload, FileText, Image, Loader2, Video, Mic } from 'lucide-react';
+import { X, Upload, FileText, Image, Loader2, Video, Mic, Camera, RotateCcw } from 'lucide-react';
 
 interface UploadModalProps {
   onClose: () => void;
@@ -12,13 +12,74 @@ interface UploadModalProps {
 
 const UploadModal: React.FC<UploadModalProps> = ({ onClose, onUpload, folders }) => {
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState<'upload' | 'note' | 'video' | 'voice'>('upload');
+  const [activeTab, setActiveTab] = useState<'upload' | 'note' | 'video' | 'camera' | 'voice'>('upload');
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [selectedFolder, setSelectedFolder] = useState('');
   const [tags, setTags] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+
+  // Camera State
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [isCameraActive, setIsCameraActive] = useState(false);
+  const [capturedImage, setCapturedImage] = useState<string | null>(null);
+  const [stream, setStream] = useState<MediaStream | null>(null);
+
+  useEffect(() => {
+      // Cleanup stream when component unmounts or tab changes
+      return () => {
+          if (stream) {
+              stream.getTracks().forEach(track => track.stop());
+          }
+      };
+  }, [stream]);
+
+  const startCamera = async () => {
+      try {
+          const mediaStream = await navigator.mediaDevices.getUserMedia({ 
+              video: { facingMode: 'environment' } 
+          });
+          setStream(mediaStream);
+          if (videoRef.current) {
+              videoRef.current.srcObject = mediaStream;
+              setIsCameraActive(true);
+          }
+      } catch (err) {
+          console.error("Camera denied", err);
+          alert("Could not access camera. Please allow permissions.");
+      }
+  };
+
+  const stopCamera = () => {
+      if (stream) {
+          stream.getTracks().forEach(track => track.stop());
+          setStream(null);
+          setIsCameraActive(false);
+      }
+  };
+
+  const capturePhoto = () => {
+      if (videoRef.current && canvasRef.current) {
+          const video = videoRef.current;
+          const canvas = canvasRef.current;
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+              ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+              const dataUrl = canvas.toDataURL('image/jpeg');
+              setCapturedImage(dataUrl);
+              stopCamera();
+          }
+      }
+  };
+
+  const retakePhoto = () => {
+      setCapturedImage(null);
+      startCamera();
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -45,10 +106,14 @@ const UploadModal: React.FC<UploadModalProps> = ({ onClose, onUpload, folders })
       } else if (activeTab === 'video') {
           type = ItemType.VIDEO;
           // finalContent is already set from text input
+      } else if (activeTab === 'camera' && capturedImage) {
+          type = ItemType.IMAGE;
+          finalContent = capturedImage;
+          mimeType = 'image/jpeg';
       }
 
       const newItem = await mockBackend.createItem({
-        title,
+        title: title || (type === ItemType.IMAGE ? `Captured Image ${new Date().toLocaleTimeString()}` : 'Untitled'),
         content: finalContent,
         type,
         folderId: selectedFolder || undefined,
@@ -65,6 +130,15 @@ const UploadModal: React.FC<UploadModalProps> = ({ onClose, onUpload, folders })
     }
   };
 
+  // Switch tabs logic to handle camera stop
+  const handleTabChange = (tab: typeof activeTab) => {
+      if (activeTab === 'camera' && tab !== 'camera') {
+          stopCamera();
+          setCapturedImage(null);
+      }
+      setActiveTab(tab);
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
       <div className="bg-white dark:bg-stone-900 rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh] border border-stone-200 dark:border-stone-800">
@@ -78,30 +152,22 @@ const UploadModal: React.FC<UploadModalProps> = ({ onClose, onUpload, folders })
 
         {/* Tabs */}
         <div className="flex border-b border-stone-100 dark:border-stone-800 overflow-x-auto no-scrollbar">
-          <button 
-            className={`flex-1 min-w-fit px-4 py-3 text-sm font-medium transition-colors whitespace-nowrap ${activeTab === 'upload' ? 'text-wood-600 dark:text-wood-500 border-b-2 border-wood-500' : 'text-stone-500 dark:text-stone-400 hover:bg-stone-50 dark:hover:bg-stone-800'}`}
-            onClick={() => setActiveTab('upload')}
-          >
-            Upload File
-          </button>
-          <button 
-            className={`flex-1 min-w-fit px-4 py-3 text-sm font-medium transition-colors whitespace-nowrap ${activeTab === 'note' ? 'text-wood-600 dark:text-wood-500 border-b-2 border-wood-500' : 'text-stone-500 dark:text-stone-400 hover:bg-stone-50 dark:hover:bg-stone-800'}`}
-            onClick={() => setActiveTab('note')}
-          >
-            Paste Text
-          </button>
-           <button 
-            className={`flex-1 min-w-fit px-4 py-3 text-sm font-medium transition-colors whitespace-nowrap ${activeTab === 'video' ? 'text-wood-600 dark:text-wood-500 border-b-2 border-wood-500' : 'text-stone-500 dark:text-stone-400 hover:bg-stone-50 dark:hover:bg-stone-800'}`}
-            onClick={() => setActiveTab('video')}
-          >
-            Video Link
-          </button>
-          <button 
-            className={`flex-1 min-w-fit px-4 py-3 text-sm font-medium transition-colors whitespace-nowrap ${activeTab === 'voice' ? 'text-wood-600 dark:text-wood-500 border-b-2 border-wood-500' : 'text-stone-500 dark:text-stone-400 hover:bg-stone-50 dark:hover:bg-stone-800'}`}
-            onClick={() => setActiveTab('voice')}
-          >
-            Voice Note
-          </button>
+          {[
+              { id: 'upload', label: 'File', icon: Upload },
+              { id: 'note', label: 'Note', icon: FileText },
+              { id: 'camera', label: 'Camera', icon: Camera },
+              { id: 'video', label: 'Video', icon: Video },
+              { id: 'voice', label: 'Voice', icon: Mic },
+          ].map((tab) => (
+             <button 
+                key={tab.id}
+                className={`flex-1 min-w-fit px-4 py-3 text-sm font-medium transition-colors whitespace-nowrap flex items-center justify-center gap-2 ${activeTab === tab.id ? 'text-wood-600 dark:text-wood-500 border-b-2 border-wood-500' : 'text-stone-500 dark:text-stone-400 hover:bg-stone-50 dark:hover:bg-stone-800'}`}
+                onClick={() => handleTabChange(tab.id as any)}
+            >
+                <tab.icon size={16} />
+                {tab.label}
+            </button>
+          ))}
         </div>
 
         {/* Form */}
@@ -122,7 +188,7 @@ const UploadModal: React.FC<UploadModalProps> = ({ onClose, onUpload, folders })
             <label className="block text-sm font-medium text-stone-700 dark:text-stone-300 mb-1">Title</label>
             <input 
               type="text" 
-              required
+              required={activeTab !== 'camera'}
               placeholder={activeTab === 'video' ? "e.g. Thermodynamics Lecture 1" : "e.g. Math Homework"}
               value={title}
               onChange={e => setTitle(e.target.value)}
@@ -130,7 +196,7 @@ const UploadModal: React.FC<UploadModalProps> = ({ onClose, onUpload, folders })
             />
           </div>
 
-          {activeTab === 'upload' ? (
+          {activeTab === 'upload' && (
             <div>
               <label className="block text-sm font-medium text-stone-700 dark:text-stone-300 mb-1">File</label>
               <div className="border-2 border-dashed border-stone-300 dark:border-stone-700 rounded-lg p-6 flex flex-col items-center justify-center text-stone-500 dark:text-stone-400 bg-stone-50 dark:bg-stone-800/50 hover:bg-white dark:hover:bg-stone-800 hover:border-wood-400 transition-colors cursor-pointer relative">
@@ -154,7 +220,61 @@ const UploadModal: React.FC<UploadModalProps> = ({ onClose, onUpload, folders })
                 )}
               </div>
             </div>
-          ) : activeTab === 'video' ? (
+          )}
+
+          {activeTab === 'camera' && (
+              <div className="space-y-3">
+                  <div className="relative w-full aspect-video bg-black rounded-lg overflow-hidden flex items-center justify-center border border-stone-800">
+                      {!isCameraActive && !capturedImage && (
+                          <div className="text-center">
+                              <Camera size={40} className="mx-auto text-stone-600 mb-2" />
+                              <button 
+                                type="button" 
+                                onClick={startCamera} 
+                                className="px-4 py-2 bg-wood-600 text-white rounded-lg hover:bg-wood-500 transition-colors text-sm"
+                              >
+                                  Start Camera
+                              </button>
+                          </div>
+                      )}
+                      
+                      <video 
+                        ref={videoRef} 
+                        autoPlay 
+                        playsInline 
+                        className={`absolute inset-0 w-full h-full object-cover ${isCameraActive && !capturedImage ? 'block' : 'hidden'}`}
+                      />
+                      
+                      <canvas ref={canvasRef} className="hidden" />
+                      
+                      {capturedImage && (
+                          <img src={capturedImage} alt="Captured" className="w-full h-full object-cover" />
+                      )}
+                  </div>
+
+                  {isCameraActive && (
+                      <button 
+                        type="button" 
+                        onClick={capturePhoto} 
+                        className="w-full py-3 bg-white text-stone-900 border border-stone-200 hover:bg-stone-50 font-bold rounded-lg shadow-sm"
+                      >
+                          Capture
+                      </button>
+                  )}
+                  
+                  {capturedImage && (
+                      <button 
+                        type="button" 
+                        onClick={retakePhoto} 
+                        className="w-full py-2 flex items-center justify-center gap-2 text-stone-600 hover:text-stone-900 text-sm"
+                      >
+                          <RotateCcw size={14} /> Retake
+                      </button>
+                  )}
+              </div>
+          )}
+
+          {activeTab === 'video' && (
             <div>
               <label className="block text-sm font-medium text-stone-700 dark:text-stone-300 mb-1">Video URL</label>
               <div className="relative">
@@ -170,7 +290,9 @@ const UploadModal: React.FC<UploadModalProps> = ({ onClose, onUpload, folders })
               </div>
               <p className="text-xs text-stone-500 mt-1">Supports YouTube, Vimeo, or direct video links.</p>
             </div>
-          ) : (
+          )}
+
+          {activeTab === 'note' && (
              <div>
               <label className="block text-sm font-medium text-stone-700 dark:text-stone-300 mb-1">Content</label>
               <textarea 
@@ -224,8 +346,8 @@ const UploadModal: React.FC<UploadModalProps> = ({ onClose, onUpload, folders })
           {activeTab !== 'voice' && (
             <button 
                 onClick={handleSubmit}
-                disabled={isUploading}
-                className="px-6 py-2 bg-stone-900 dark:bg-wood-600 text-white font-medium rounded-lg hover:bg-stone-800 dark:hover:bg-wood-500 transition-colors flex items-center gap-2"
+                disabled={isUploading || (activeTab === 'camera' && !capturedImage)}
+                className="px-6 py-2 bg-stone-900 dark:bg-wood-600 text-white font-medium rounded-lg hover:bg-stone-800 dark:hover:bg-wood-500 transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
                 {isUploading ? <><Loader2 size={18} className="animate-spin" /> Saving...</> : 'Save Item'}
             </button>

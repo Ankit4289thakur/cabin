@@ -11,6 +11,16 @@ export const MODELS = {
   IMAGE: 'gemini-2.5-flash-image'
 };
 
+export interface ChatSource {
+  title: string;
+  uri: string;
+}
+
+export interface ChatResponse {
+  text: string;
+  sources: ChatSource[];
+}
+
 export const generateContentFromPrompt = async (prompt: string, model: string = MODELS.FLASH): Promise<string> => {
     if (!apiKey) {
         return "AI is unavailable in demo mode without an API Key.";
@@ -25,6 +35,56 @@ export const generateContentFromPrompt = async (prompt: string, model: string = 
     } catch (error: any) {
         console.error("Gemini API Error:", error);
         return `Error interacting with Gemini: ${error.message || 'Unknown error'}`;
+    }
+};
+
+export const chatWithSearch = async (history: { role: string; parts: { text: string }[] }[], newMessage: string): Promise<ChatResponse> => {
+    if (!apiKey) {
+        return { 
+            text: "I cannot search the web without a valid API Key. Please configure your API_KEY.", 
+            sources: [] 
+        };
+    }
+
+    try {
+        const contents = [
+            ...history,
+            { role: 'user', parts: [{ text: newMessage }] }
+        ];
+
+        const response = await ai.models.generateContent({
+            model: MODELS.FLASH,
+            contents: contents,
+            config: {
+                tools: [{ googleSearch: {} }]
+            }
+        });
+
+        const text = response.text || "I couldn't find an answer.";
+        
+        // Extract grounding metadata (sources)
+        const sources: ChatSource[] = [];
+        const chunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
+
+        if (chunks) {
+            chunks.forEach((chunk: any) => {
+                if (chunk.web) {
+                    sources.push({
+                        title: chunk.web.title || "Source",
+                        uri: chunk.web.uri
+                    });
+                }
+            });
+        }
+
+        return { text, sources };
+
+    } catch (error: any) {
+        console.error("Gemini Chat Error:", error);
+        return { 
+            text: `Sorry, I encountered an error searching: ${error.message || 'Unknown error'}`, 
+            sources: [] 
+        };
     }
 };
 

@@ -1,15 +1,35 @@
 import React, { useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
-import { LogIn, Feather, Layout, Shield, Mic, Bot } from 'lucide-react';
+import { mockBackend } from '../services/mockBackend';
+import { LogIn, Feather, Layout, Shield, Mic, Bot, Loader2, User as UserIcon } from 'lucide-react';
 
 const LandingPage: React.FC = () => {
   const { isAuthenticated, login, isLoading } = useAuth();
   const [email, setEmail] = useState('');
+  const [fetchedName, setFetchedName] = useState<string | null>(null);
+  const [isCheckingUser, setIsCheckingUser] = useState(false);
+  
+  // State for google redirect simulation
+  const [isRedirecting, setIsRedirecting] = useState(false);
 
   if (isAuthenticated) {
     return <Navigate to="/app" replace />;
   }
+
+  const handleEmailBlur = async () => {
+    if (email && email.includes('@') && !fetchedName) {
+        setIsCheckingUser(true);
+        try {
+            const name = await mockBackend.getUserName(email);
+            setFetchedName(name);
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setIsCheckingUser(false);
+        }
+    }
+  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -17,11 +37,26 @@ const LandingPage: React.FC = () => {
   };
 
   const handleGoogleLogin = async () => {
-    // Simulating Google Login
-    // Note to User: Real Google Auth requires a GCP Project Client ID and a library like @react-oauth/google.
-    // This simulated delay represents the auth process.
-    await login('google_user@cabin.app');
+    // Simulate a redirect experience as requested
+    setIsRedirecting(true);
+    
+    // Simulate network delay for redirect (2 seconds)
+    setTimeout(async () => {
+        // Log in with a google-like email
+        await login('ankito@gmail.com');
+        setIsRedirecting(false);
+    }, 2000);
   };
+
+  if (isRedirecting) {
+      return (
+          <div className="min-h-screen bg-white dark:bg-stone-950 flex flex-col items-center justify-center animate-fade-in-up">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-wood-500 mb-6"></div>
+              <p className="text-xl font-serif font-bold text-stone-800 dark:text-stone-100">Redirecting to Google...</p>
+              <p className="text-stone-500 dark:text-stone-400 text-sm mt-2">Please wait while we authenticate your account.</p>
+          </div>
+      );
+  }
 
   return (
     <div className="min-h-screen bg-stone-50 dark:bg-stone-950 text-stone-800 dark:text-stone-100 flex flex-col transition-colors">
@@ -56,22 +91,50 @@ const LandingPage: React.FC = () => {
           <form onSubmit={handleLogin} className="space-y-4">
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-stone-700 dark:text-stone-300 text-left mb-1">Email Address</label>
-              <input
-                type="email"
-                id="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@example.com"
-                className="w-full px-4 py-3 rounded-lg border border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-800 text-stone-900 dark:text-stone-100 focus:border-wood-500 focus:ring-2 focus:ring-wood-500/20 outline-none transition-all"
-                required
-              />
+              <div className="relative">
+                <input
+                    type="email"
+                    id="email"
+                    value={email}
+                    onChange={(e) => {
+                        setEmail(e.target.value);
+                        if (!e.target.value) setFetchedName(null);
+                    }}
+                    onBlur={handleEmailBlur}
+                    placeholder="you@example.com"
+                    className="w-full px-4 py-3 rounded-lg border border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-800 text-stone-900 dark:text-stone-100 focus:border-wood-500 focus:ring-2 focus:ring-wood-500/20 outline-none transition-all"
+                    required
+                />
+                {isCheckingUser && (
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                        <Loader2 size={16} className="animate-spin text-stone-400" />
+                    </div>
+                )}
+              </div>
             </div>
+
+            {/* Found User Display */}
+            <div className={`overflow-hidden transition-all duration-300 ease-out ${fetchedName ? 'max-h-24 opacity-100 scale-100' : 'max-h-0 opacity-0 scale-95'}`}>
+                <div className="flex items-center gap-3 p-3 bg-stone-50 dark:bg-stone-800/50 rounded-lg border border-stone-100 dark:border-stone-800 animate-fade-in-up">
+                    <div className="w-10 h-10 rounded-full bg-wood-100 dark:bg-wood-900/30 text-wood-600 dark:text-wood-400 flex items-center justify-center font-bold text-sm shrink-0 border border-wood-200 dark:border-wood-800">
+                        {fetchedName?.charAt(0)}
+                    </div>
+                    <div className="text-left overflow-hidden">
+                        <p className="text-xs text-stone-500 dark:text-stone-400 truncate">Welcome back,</p>
+                        <p className="text-sm font-bold text-stone-800 dark:text-stone-100 truncate">{fetchedName}</p>
+                    </div>
+                    <div className="ml-auto">
+                         <UserIcon size={16} className="text-wood-500" />
+                    </div>
+                </div>
+            </div>
+
             <button
               type="submit"
-              disabled={isLoading}
+              disabled={isLoading || isCheckingUser}
               className="w-full bg-stone-900 hover:bg-stone-800 dark:bg-wood-600 dark:hover:bg-wood-500 text-white font-medium py-3 rounded-lg transition-colors flex items-center justify-center gap-2"
             >
-              {isLoading ? 'Entering Cabin...' : <>Enter Cabin <LogIn size={18} /></>}
+              {isLoading ? 'Entering Cabin...' : fetchedName ? 'Enter Cabin' : <>Enter Cabin <LogIn size={18} /></>}
             </button>
           </form>
           
@@ -93,7 +156,7 @@ const LandingPage: React.FC = () => {
               <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
               <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
               <path fill="#FBBC05" d="M5.84 14.11c-.22-.66-.35-1.36-.35-2.11s.13-1.45.35-2.11V7.05H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.95l3.66-2.84z" />
-              <path fill="#EA4335" d="M12 4.62c1.61 0 3.1.56 4.28 1.69l3.21-3.21C17.45 1.2 14.97 0 12 0 7.7 0 3.99 2.47 2.18 7.05l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
+              <path fill="#EA4335" d="M12 4.62c1.61 0 3.1.56 4.28 1.61l3.21-3.21C17.45 1.2 14.97 0 12 0 7.7 0 3.99 2.47 2.18 7.05l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
             </svg>
             Sign in with Google
           </button>
@@ -131,28 +194,17 @@ const LandingPage: React.FC = () => {
       <section className="py-16 bg-stone-50 dark:bg-stone-950 border-t border-stone-200 dark:border-stone-800">
         <div className="max-w-4xl mx-auto px-4 text-center">
             <span className="text-wood-600 dark:text-wood-500 text-sm font-bold tracking-wider uppercase mb-4 block">Coming Soon</span>
-            <h2 className="font-serif text-3xl font-bold mb-10 text-stone-900 dark:text-stone-100">The Future of Cabin</h2>
-            
-            <div className="grid md:grid-cols-2 gap-8">
-                 <div className="bg-white dark:bg-stone-900 p-8 rounded-2xl shadow-sm border border-stone-100 dark:border-stone-800 flex flex-col items-center">
-                    <div className="w-12 h-12 bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 rounded-full flex items-center justify-center mb-4">
-                        <Bot size={24} />
-                    </div>
-                    <h3 className="font-bold text-lg mb-2 text-stone-800 dark:text-stone-100">Advanced AI Tutor</h3>
-                    <p className="text-stone-600 dark:text-stone-400 text-sm">
-                        Interactive quizzes generated from your notes and personalized study plans.
-                    </p>
-                 </div>
-
-                 <div className="bg-white dark:bg-stone-900 p-8 rounded-2xl shadow-sm border border-stone-100 dark:border-stone-800 flex flex-col items-center">
-                    <div className="w-12 h-12 bg-teal-100 dark:bg-teal-900/30 text-teal-600 dark:text-teal-400 rounded-full flex items-center justify-center mb-4">
-                        <Mic size={24} />
-                    </div>
-                    <h3 className="font-bold text-lg mb-2 text-stone-800 dark:text-stone-100">Voice Mode</h3>
-                    <p className="text-stone-600 dark:text-stone-400 text-sm">
-                        Record lectures and have them transcribed and summarized automatically.
-                    </p>
-                 </div>
+            <h2 className="font-serif text-2xl font-bold text-stone-900 dark:text-stone-100 mb-6">Voice Memos & Transcription</h2>
+            <div className="flex items-center justify-center gap-4 text-stone-500 dark:text-stone-400">
+                <div className="flex items-center gap-2">
+                    <Mic size={18} />
+                    <span>Record Audio</span>
+                </div>
+                <span className="w-1 h-1 bg-stone-400 rounded-full"></span>
+                <div className="flex items-center gap-2">
+                    <Bot size={18} />
+                    <span>AI Summaries</span>
+                </div>
             </div>
         </div>
       </section>
